@@ -147,7 +147,7 @@ legacy:
   host: "10.1.33.48"
   port: 22
   user: "root"
-  password: "redborder"
+  password: "password"
   ssh_extra_args:
     - "-o"
     - "StrictHostKeyChecking=no"
@@ -179,7 +179,7 @@ ng:
   host: "10.1.33.160"
   port: 22
   user: "root"
-  password: "redborder"
+  password: "password"
   ssh_extra_args:
     - "-o"
     - "StrictHostKeyChecking=no"

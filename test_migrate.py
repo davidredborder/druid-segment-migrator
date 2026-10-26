@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 import shutil
+import struct
 import tarfile
 import tempfile
 import unittest
@@ -50,11 +51,46 @@ def _safe_extractall(tf: tarfile.TarFile, dest: Path) -> None:
             tf.extractall(dest)
 
 
+def _create_mock_index_zip(dest_path: Path) -> Path:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    desc_json = b'{"type":"string","hasMultipleValues":false,"valueType":"STRING"}'
+    desc_len = len(desc_json)
+    dict_payload = (
+        b"78b73529-63a4-4b1f-9d45-3e48f0eb0db0\n"
+        b"1199e7b3-1f84-4ade-bd26-44026b11291d\n"
+        b"eaaffc57-804a-4c30-b86a-39d3ce9597a9\n"
+        b"5dad542b-870b-4aeb-bc91-fbefe43af191\n"
+    )
+    gi_bytes = len(dict_payload) + 4
+    gi_header = struct.pack(">BBII", 1, 0, gi_bytes, 4)
+
+    col = struct.pack(">I", desc_len) + desc_json + b"\x00" * 5 + gi_header + dict_payload
+    prefix = b"dummy_prefix_data\n"
+    suffix = b"\nrouter\ndummy_suffix_data\n"
+    start = len(prefix)
+    end = start + len(col)
+    smoosh_00000 = prefix + col + suffix
+    meta_smoosh = f"v1,2147483647,1\nsensor_uuid,0,{start},{end}\n".encode("utf-8")
+
+    with zipfile.ZipFile(dest_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr("version.bin", b"\x00\x00\x00\x09")
+        zf.writestr("factory.json", b'{"type":"mMapSegmentFactory"}')
+        zf.writestr("meta.smoosh", meta_smoosh)
+        zf.writestr("00000.smoosh", smoosh_00000)
+    return dest_path
+
+
 class TestMigrate(unittest.TestCase):
     def setUp(self):
         self.tmpdir = Path(tempfile.mkdtemp(prefix="druid_mig_test_"))
         self.raw_tar = self.tmpdir / "legacy-segments.tar.gz"
         self.out_tar = self.tmpdir / "ng-segments.tar"
+        local_fixture = Path(__file__).resolve().parent / "legacy" / "index.zip"
+        if local_fixture.is_file():
+            self.fixture_index_zip = local_fixture
+        else:
+            self.fixture_index_zip = self.tmpdir / "fixture_index.zip"
+            _create_mock_index_zip(self.fixture_index_zip)
         self.config = {
             "legacy": {
                 "host": "10.1.33.48",
@@ -123,7 +159,7 @@ class TestMigrate(unittest.TestCase):
             / str(partition)
         )
         seg_dir.mkdir(parents=True)
-        shutil.copy(Path(__file__).resolve().parent / "legacy" / "index.zip", seg_dir / "index.zip")
+        shutil.copy(self.fixture_index_zip, seg_dir / "index.zip")
         (seg_dir / "descriptor.json").write_text(json.dumps(SAMPLE_DESCRIPTOR))
         if include_rule:
             if empty_rule:
@@ -276,7 +312,7 @@ class TestMigrate(unittest.TestCase):
         for ds, interval_dir, ver in segments:
             seg_dir = src_dir / "segments" / ds / interval_dir / ver / "0"
             seg_dir.mkdir(parents=True)
-            shutil.copy(Path(__file__).resolve().parent / "legacy" / "index.zip", seg_dir / "index.zip")
+            shutil.copy(self.fixture_index_zip, seg_dir / "index.zip")
             desc = dict(SAMPLE_DESCRIPTOR)
             desc["dataSource"] = ds
             desc["interval"] = interval_dir.replace("_", "/")
@@ -407,7 +443,7 @@ class TestMigrate(unittest.TestCase):
         self.assertIn(new_ds, rule["id"])
         self.assertIn(new_ds, rule["payload"]["loadSpec"]["key"])
 
-        with zipfile.ZipFile(Path(__file__).resolve().parent / "legacy" / "index.zip", "r") as orig_zf:
+        with zipfile.ZipFile(self.fixture_index_zip, "r") as orig_zf:
             orig_smoosh_len = len(orig_zf.read("00000.smoosh"))
 
         with zipfile.ZipFile(seg_dir / "index.zip", "r") as out_zf:
