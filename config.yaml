@@ -1,0 +1,49 @@
+# Configuration for Druid Segment Migration (Legacy 0.12.3 -> NG 31.0.1)
+
+legacy:
+  host: "10.1.33.48"
+  port: 22
+  user: "root"
+  password: "password"
+  ssh_extra_args:
+    - "-o"
+    - "StrictHostKeyChecking=no"
+    - "-o"
+    - "HostKeyAlgorithms=+ssh-rsa"
+    - "-o"
+    - "PubkeyAcceptedKeyTypes=+ssh-rsa"
+  backup_script: "/opt/rb/bin/rb_backup_segments.sh"
+  remote_tar_path: "/tmp/legacy-segments.tar.gz"
+  filter: ""                  # Optional grep filter (-g) for rb_backup_segments.sh
+
+local:
+  work_dir: "./work"
+  raw_tar_path: "./work/legacy-segments.tar.gz"
+  converted_tar_path: "./work/ng-segments.tar"
+
+conversion:
+  target_bucket: "bucket"     # Replaces legacy "redborder" in payload.loadSpec.bucket
+  target_base_key: "rbdata"   # Prefix in payload.loadSpec.key
+  enable_segments: true       # Sets "used": "t" (or "f" if false) in rule.json
+  bump_version: false         # If true, sets segment version to current UTC timestamp to supersede existing NG segments
+  datasource_map: {}          # Optional mapping: {"old_ds": "new_ds"}
+  uuid_map: {}                # Optional 36-char UUID map (rewrites index.zip smoosh + rb_flow_<uuid> datasource names)
+  uuid_map:
+        "2568eb80-4f6d-493c-aa09-34274ab1cec9": "19f56ebf-cb7a-4906-bba4-afa2658f132f"
+        "bcd309a1-ca85-4a0d-b0d1-d0716d9f3822": "2f369e1f-cb97-4bc8-8138-6b66b9d16a1b"
+  datasource_regex: ""        # Optional regex filter on datasource name (e.g. "^(rb_flow_.*|rb_event)$")
+  start_date: ""              # Optional ISO-8601 start date filter (e.g. "2026-10-22T18:00:00.000Z")
+  stop_date: ""               # Optional ISO-8601 stop date filter (e.g. "2026-10-22T20:00:00.000Z")
+
+ng:
+  host: "10.0.209.20"
+  port: 22
+  user: "root"
+  password: "password"
+  ssh_extra_args:
+    - "-o"
+    - "StrictHostKeyChecking=no"
+  import_script: "/usr/lib/redborder/bin/rb_export_import_segments.sh"
+  remote_tar_path: "/var/backup/segments/ng-segments.tar"
+  enable_on_import: true      # Passes -e to rb_export_import_segments.sh
+  restore_full_db: false      # Passes -b ONLY if true (keep false to preserve existing NG segments)

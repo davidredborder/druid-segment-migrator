@@ -1,0 +1,15 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Working directory & segment archives
+/work/
+*.tar
+*.tar.gz
+
+# Local scratch directories & editor swap files
+*.swp
+legacy/
+ng/
